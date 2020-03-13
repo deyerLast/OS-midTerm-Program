@@ -12,7 +12,14 @@
 #include <stdlib.h>
 #include <semaphore.h>
 
-sem_t mutex;
+#define NUM_THREADS  3
+#define TCOUNT 10
+#define COUNT_LIMIT 5
+
+
+int *count = 0;
+pthread_mutex_t count_mutex;
+pthread_cond_t count_threshold_cv;
 
 static int num[9] = {1,2,3,4,5,6,7,8,9};
 
@@ -32,9 +39,8 @@ void *Reverse(void *t) {
     long my_id = (long)t;
     
     printf("Rev 1 \n");
-    //Wait
-    //sem_wait(&mutex);
     
+    //pthread_cond_signal(&count_threshold_cv);
     //critical stuff
     printf("Rev 2 \n");
     
@@ -57,11 +63,15 @@ void *Reverse(void *t) {
         //printf("i = %d\n",i);
     }
     
-    //signal
-    sem_post(&mutex);
+    //Unlock now
+    pthread_cond_signal(&count_threshold_cv);
+    //sleep(1);
+    pthread_mutex_unlock(&count_mutex);
+    pthread_exit(NULL);
     
     
-    return NULL;
+    
+    //return NULL;
 }//reverse thread
 
 //================================================
@@ -71,9 +81,11 @@ void *Sum(void *t){
     
     printf("SUM 1 \n");
     
-    //wait
-    sem_wait(&mutex);
-    //sem_post(&mutex);
+    //wait and lock
+    pthread_mutex_lock(&count_mutex);
+    pthread_cond_wait(&count_threshold_cv,&count_mutex);
+    
+    
     
     //critical
     printf("SUM 2 \n");
@@ -89,8 +101,9 @@ void *Sum(void *t){
     printf("SUM = %d\n",sum);
     
     //signal
-    
-    return NULL;
+    pthread_mutex_unlock(&count_mutex);
+    pthread_exit(NULL);
+    //return NULL;
 }//sum thread
 
 //================================================
@@ -114,7 +127,7 @@ int main(int argc, char *argv[]){
         //TIME TAKEN =180.231000 ms
     
     //After race conditions
-        //Time Taken = 180.362000
+        //Time Taken = 180.420000
         
 
         
@@ -131,24 +144,33 @@ int main(int argc, char *argv[]){
     /*long t1=1, t2=2, t3=3;//for mutex
     //pthread_t p1,p2;
     pthread_t threads[2];//mutex version
-    pthread_attr_t attr;
+    pthread_attr_t attr;*/
     
     
     
     
     //mutex Version
-    pthread_mutex_init(&count_mutex,NULL);
-    pthread_cond_init(&count_threshold_cv, NULL);
-    //Protability, explicitly create threads in a joinable state
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_JOINABLE);
-    pthread_create(&threads[0], &attr, Reverse,(void *)t1);
-    pthread_create(&threads[1],&attr,Sum,(void*)t2);*/
-    //wait for all threads to complete
-    /*for(int i=0; i< NUM_THREADS; i++){
-        pthread_join(threads[i], NULL);
-    }*/
+    long t1=1, t2=2,t3=3;
+    pthread_t threads[3];
+    pthread_attr_t attr;
+     /* Initialize mutex and condition variable objects */
+    pthread_mutex_init(&count_mutex, NULL);
+    pthread_cond_init (&count_threshold_cv, NULL);
     
+    /* For portability, explicitly create threads in a joinable state */
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    pthread_create(&threads[0], &attr, Sum, (void *)t1);
+    pthread_create(&threads[1], &attr, Reverse, (void *)t2);
+    /*wait for all threads*/
+    for(int i=0;i<NUM_THREADS; i++){
+        pthread_join(threads[i],NULL);
+    }
+    
+    /* Clean up and exit */
+    pthread_attr_destroy(&attr);
+    pthread_mutex_destroy(&count_mutex);
+    pthread_cond_destroy(&count_threshold_cv);
     
     //FIRST VERSION
     /*pthread_create(&p1,NULL,Reverse,NULL);
@@ -163,14 +185,16 @@ int main(int argc, char *argv[]){
     
     
     
-    //FINAL VERSION
-    sem_init(&mutex, 0, 1);
+    //VERSION
+    /*sem_init(&mutex, 0, 1);
     pthread_t t1,t2;
     pthread_create(&t1,NULL,Sum,NULL);
-    //sleep(2);
+    //wait(&mutex);
+    sleep(2);
     pthread_create(&t2,NULL,Reverse,NULL);
     pthread_join(t1,NULL);
     pthread_join(t2,NULL);
+    sem_destroy(&mutex);//final version*/
     
     
     
@@ -201,13 +225,13 @@ int main(int argc, char *argv[]){
     
     
     
-    sem_destroy(&mutex);//final version
-    return 0;
+    //sem_destroy(&mutex);
+    //return 0;
     
     /* Clean up and exit */
    /* pthread_attr_destroy(&attr);
     pthread_mutex_destroy(&count_mutex);
-    pthread_cond_destroy(&count_threshold_cv);
-    pthread_exit (NULL);*/
+    pthread_cond_destroy(&count_threshold_cv);*/
+    pthread_exit (NULL);
     
 }
